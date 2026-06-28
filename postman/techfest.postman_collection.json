@@ -1,0 +1,257 @@
+{
+  "info": {
+    "name": "Tech Fest Registration API",
+    "description": "IEEE RVCE Tech Fest backend. Set base_url, then run Auth > Register, Payments > Create Order, Payments > Confirm Payment (Webhook), Tickets > Get My Ticket, then (after creating a volunteer via the CLI) Auth > Login as Volunteer and Check-in > Check In. Tokens and ids are captured automatically.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "base_url", "value": "http://localhost:8000" },
+    { "key": "student_token", "value": "" },
+    { "key": "volunteer_token", "value": "" },
+    { "key": "order_id", "value": "" },
+    { "key": "ticket_code", "value": "" },
+    { "key": "webhook_signature", "value": "" },
+    { "key": "webhook_secret", "value": "dev-webhook-secret-change-me" },
+    { "key": "student_email", "value": "asha@rvce.edu" },
+    { "key": "student_password", "value": "password123" },
+    { "key": "volunteer_email", "value": "volunteer@rvce.edu" },
+    { "key": "volunteer_password", "value": "password123" }
+  ],
+  "item": [
+    {
+      "name": "Health",
+      "request": {
+        "method": "GET",
+        "url": { "raw": "{{base_url}}/health", "host": ["{{base_url}}"], "path": ["health"] }
+      }
+    },
+    {
+      "name": "Auth",
+      "item": [
+        {
+          "name": "Register Student",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const j = pm.response.json();",
+                  "if (j.access_token) { pm.collectionVariables.set('student_token', j.access_token); }",
+                  "pm.test('registered (201)', () => pm.response.to.have.status(201));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Asha\",\n  \"email\": \"{{student_email}}\",\n  \"password\": \"{{student_password}}\"\n}"
+            },
+            "url": { "raw": "{{base_url}}/auth/register", "host": ["{{base_url}}"], "path": ["auth", "register"] }
+          }
+        },
+        {
+          "name": "Login Student",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const j = pm.response.json();",
+                  "if (j.access_token) { pm.collectionVariables.set('student_token', j.access_token); }",
+                  "pm.test('logged in (200)', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{student_email}}\",\n  \"password\": \"{{student_password}}\"\n}"
+            },
+            "url": { "raw": "{{base_url}}/auth/login", "host": ["{{base_url}}"], "path": ["auth", "login"] }
+          }
+        },
+        {
+          "name": "Login as Volunteer",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const j = pm.response.json();",
+                  "if (j.access_token) { pm.collectionVariables.set('volunteer_token', j.access_token); }",
+                  "pm.test('volunteer logged in (200)', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{volunteer_email}}\",\n  \"password\": \"{{volunteer_password}}\"\n}"
+            },
+            "url": { "raw": "{{base_url}}/auth/login", "host": ["{{base_url}}"], "path": ["auth", "login"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Payments",
+      "item": [
+        {
+          "name": "Create Order",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const j = pm.response.json();",
+                  "if (j.order_id) { pm.collectionVariables.set('order_id', j.order_id); }",
+                  "pm.test('order created (200)', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{student_token}}", "type": "string" }] },
+            "url": { "raw": "{{base_url}}/payments/order", "host": ["{{base_url}}"], "path": ["payments", "order"] }
+          }
+        },
+        {
+          "name": "Confirm Payment (Webhook)",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "const orderId = pm.collectionVariables.get('order_id');",
+                  "const status = 'paid';",
+                  "const secret = pm.collectionVariables.get('webhook_secret');",
+                  "const sig = CryptoJS.HmacSHA256(orderId + ':' + status, secret).toString(CryptoJS.enc.Hex);",
+                  "pm.collectionVariables.set('webhook_signature', sig);"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('payment confirmed (200)', () => pm.response.to.have.status(200));",
+                  "pm.test('ticket confirmed', () => pm.expect(pm.response.json().ticket_status).to.eql('confirmed'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"order_id\": \"{{order_id}}\",\n  \"status\": \"paid\",\n  \"signature\": \"{{webhook_signature}}\"\n}"
+            },
+            "url": { "raw": "{{base_url}}/payments/webhook", "host": ["{{base_url}}"], "path": ["payments", "webhook"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Tickets",
+      "item": [
+        {
+          "name": "Get My Ticket",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const j = pm.response.json();",
+                  "if (j.ticket_code) { pm.collectionVariables.set('ticket_code', j.ticket_code); }",
+                  "pm.test('ok (200)', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{student_token}}", "type": "string" }] },
+            "url": { "raw": "{{base_url}}/tickets/me", "host": ["{{base_url}}"], "path": ["tickets", "me"] }
+          }
+        },
+        {
+          "name": "Get My Ticket QR (PNG)",
+          "request": {
+            "method": "GET",
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{student_token}}", "type": "string" }] },
+            "url": { "raw": "{{base_url}}/tickets/me/qr", "host": ["{{base_url}}"], "path": ["tickets", "me", "qr"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Check-in",
+      "item": [
+        {
+          "name": "Check In",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('checked in (200)', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{volunteer_token}}", "type": "string" }] },
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"ticket_code\": \"{{ticket_code}}\"\n}"
+            },
+            "url": { "raw": "{{base_url}}/checkin", "host": ["{{base_url}}"], "path": ["checkin"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Volunteer",
+      "item": [
+        {
+          "name": "List Registrations",
+          "request": {
+            "method": "GET",
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{volunteer_token}}", "type": "string" }] },
+            "url": {
+              "raw": "{{base_url}}/registrations?page=1&page_size=50",
+              "host": ["{{base_url}}"],
+              "path": ["registrations"],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "page_size", "value": "50" },
+                { "key": "status", "value": "confirmed", "disabled": true }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Stats",
+          "request": {
+            "method": "GET",
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{volunteer_token}}", "type": "string" }] },
+            "url": { "raw": "{{base_url}}/stats", "host": ["{{base_url}}"], "path": ["stats"] }
+          }
+        }
+      ]
+    }
+  ]
+}
