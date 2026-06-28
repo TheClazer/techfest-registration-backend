@@ -1,11 +1,16 @@
 # Convenience targets. Assumes an activated virtualenv (see README for setup).
-.PHONY: install run test volunteer docker docker-run
+.PHONY: install run run-prod test volunteer docker docker-run
 
 install:
 	pip install -r requirements.txt
 
 run:
 	uvicorn app.main:app --reload
+
+# Production-style run with the load-shedding valve (see SCALE.md): Uvicorn
+# returns 503 beyond --limit-concurrency simultaneous connections.
+run-prod:
+	uvicorn app.main:app --host 0.0.0.0 --port 8000 --limit-concurrency 200
 
 test:
 	pytest
