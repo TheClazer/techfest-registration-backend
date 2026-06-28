@@ -38,7 +38,7 @@ Development Hiring Challenge.
 - Volunteer **`/registrations`** (paginated, filterable) and **`/stats`** dashboard.
 - **Bounded-concurrency** password hashing (the implemented core of [SCALE.md](SCALE.md)).
 - Per-IP **rate limiting**, **idempotency**, uniform **error envelope**, **request-id** logging.
-- **34 automated tests** covering the edge cases, a **Dockerfile**, and a **Postman collection**.
+- **46 automated tests** covering the edge cases, a **Dockerfile**, and a **Postman collection**.
 
 ---
 
@@ -139,10 +139,10 @@ command on an existing user promotes them to volunteer.)
 pytest
 ```
 
-42 tests cover registration, login, tickets/QR, payments + idempotency, atomic check-in, RBAC,
-capacity, and **real-concurrency races** (duplicate registration, double check-in, last-seat) in
-`tests/test_concurrency.py`. (Argon2 cost is lowered in tests for speed; rate limiting is disabled in
-tests since its store is process-global — the 429 path is verified separately.)
+46 tests cover registration (sync + async), login, tickets/QR, payments + idempotency, atomic
+check-in, RBAC, capacity, and **real-concurrency races** (duplicate registration, double check-in,
+last-seat) in `tests/test_concurrency.py`. (Argon2 cost is lowered in tests for speed; rate limiting
+is disabled in tests since its store is process-global — the 429 path is verified separately.)
 
 ---
 
@@ -258,7 +258,7 @@ All errors share one shape:
 { "error": { "code": "machine_code", "message": "Human readable.", "details": null } }
 ```
 
-Summary of every endpoint:
+Core endpoints (the additive async pair is noted just below the table):
 
 | # | Method | Path | Auth |
 | --- | --- | --- | --- |
