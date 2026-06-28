@@ -41,9 +41,10 @@ class Settings(BaseSettings):
     ticket_price: int = 50000  # paise (== 500.00 INR)
     currency: str = "INR"
 
-    # Rate limits (slowapi syntax, e.g. "10/minute")
-    rate_limit_register: str = "10/minute"
-    rate_limit_login: str = "20/minute"
+    # Rate limits (slowapi syntax, e.g. "30/minute"). Generous enough not to impede
+    # normal testing, low enough to blunt scripted abuse.
+    rate_limit_register: str = "30/minute"
+    rate_limit_login: str = "60/minute"
 
     # Database
     database_url: str = "sqlite:///./techfest.db"
