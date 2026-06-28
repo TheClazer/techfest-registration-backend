@@ -67,6 +67,19 @@ postman/               Postman collection
 
 ---
 
+## Architecture
+
+**Request flow:** `client → Uvicorn → request-context middleware (assigns X-Request-ID) → router → service → SQLAlchemy/SQLite`, with a single exception layer wrapping everything so every failure returns the same JSON envelope.
+
+**Layering (why it's organised this way):**
+- `routers/` — HTTP only: validate input, call a service, shape the response. Thin and readable.
+- `services/` — business logic and transactions (registration, payments, check-in). All state changes and the atomic/idempotent logic live here.
+- `models.py` vs `schemas.py` — database models are kept separate from API request/response contracts.
+- `security.py` / `deps.py` — hashing + tokens, and the auth/RBAC dependencies.
+- `errors.py` — one uniform error envelope (with a traceable `request_id`) for the whole app.
+
+---
+
 ## Quick start (local)
 
 Prerequisites: **Python 3.11+**.

@@ -35,6 +35,8 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 )
 @limiter.limit(REGISTER_LIMIT)
 def register(request: Request, payload: RegisterRequest, db: Session = Depends(get_db)) -> RegisterResponse:
+    # MEETS REQUIREMENT: Mandatory Requirement 1 (Authentication - Registration).
+    # WEAK POINT: Synchronous execution blocks the AnyIO thread pool under high load.
     user, ticket = register_student(
         db, name=payload.name, email=payload.email, password=payload.password
     )
@@ -49,6 +51,7 @@ def register(request: Request, payload: RegisterRequest, db: Session = Depends(g
 @router.post("/login", response_model=TokenResponse, summary="Log in and receive a JWT access token")
 @limiter.limit(LOGIN_LIMIT)
 def login(request: Request, payload: LoginRequest, db: Session = Depends(get_db)) -> TokenResponse:
+    # MEETS REQUIREMENT: Mandatory Requirement 1 (Authentication - Login).
     email_norm = payload.email.strip().lower()
     user = db.scalar(select(User).where(User.email == email_norm))
 

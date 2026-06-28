@@ -13,10 +13,13 @@ from .errors import error_body
 limiter = Limiter(key_func=get_remote_address)
 
 
-def rate_limit_exceeded_handler(_request: Request, _exc: RateLimitExceeded) -> JSONResponse:
+def rate_limit_exceeded_handler(request: Request, _exc: RateLimitExceeded) -> JSONResponse:
+    request_id = getattr(request.state, "request_id", None)
     return JSONResponse(
         status_code=429,
-        content=error_body("rate_limited", "Too many requests. Please slow down and try again shortly."),
+        content=error_body(
+            "rate_limited", "Too many requests. Please slow down and try again shortly.", request_id=request_id
+        ),
     )
 
 

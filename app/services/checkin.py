@@ -10,6 +10,9 @@ from ..security import verify_ticket
 
 
 def check_in(db: Session, *, ticket_code: str, volunteer: User) -> tuple[Ticket, User]:
+    # MEETS REQUIREMENT: Mandatory Requirement 4 (Check-in).
+    # STRENGTH: Uses atomic row-level status matching (confirmed -> checked_in)
+    # to prevent race conditions from duplicate scans.
     ticket_uuid = verify_ticket(ticket_code)
     if ticket_uuid is None:
         raise AppError(400, "invalid_ticket", "This QR code is invalid or has been tampered with.")

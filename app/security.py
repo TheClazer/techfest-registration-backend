@@ -25,6 +25,10 @@ _password_hasher = PasswordHasher(
 # of incoming load. This is the implemented core of the SCALE.md strategy: FastAPI
 # runs sync routes in a threadpool, and this semaphore bounds how many of those
 # threads may be inside an (expensive, memory-hard) hash/verify at once.
+#
+# NOTE: While this protects memory, it causes requests to block in the sync threadpool,
+# leading to high latencies (up to 80s) during a registration spike since there is no
+# actual background job queue implemented.
 _HASH_SEMAPHORE = threading.BoundedSemaphore(settings.hash_concurrency)
 
 

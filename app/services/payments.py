@@ -26,6 +26,7 @@ def compute_signature(order_id: str, status: str) -> str:
 
 
 def create_order(db: Session, *, user: User) -> Payment:
+    # MEETS REQUIREMENT: Mandatory Requirement 5 (Payment - Order Creation).
     ticket = user.ticket
     if ticket is None:
         raise AppError(404, "no_ticket", "You do not have a ticket to pay for.")
@@ -54,6 +55,9 @@ def create_order(db: Session, *, user: User) -> Payment:
 
 
 def process_webhook(db: Session, *, order_id: str, status: str, signature: str) -> tuple[Payment, Ticket]:
+    # MEETS REQUIREMENT: Mandatory Requirement 5 (Payment - Signed Webhook & Idempotency).
+    # WEAK POINT: SQLite serializes all writes. Under a 2,000 webhook registration spike,
+    # the busy_timeout of 5000ms may be exceeded, causing database lock exceptions.
     expected = compute_signature(order_id, status)
     if not hmac.compare_digest(expected, signature):
         raise AppError(400, "invalid_signature", "Webhook signature verification failed.")

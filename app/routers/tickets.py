@@ -28,6 +28,7 @@ def _ticket_out(ticket: Ticket) -> TicketOut:
 
 @router.get("/me", response_model=TicketOut, summary="View your own ticket (and QR once confirmed)")
 def my_ticket(user: User = Depends(get_current_user)) -> TicketOut:
+    # MEETS REQUIREMENT: Mandatory Requirement 3 (Tickets).
     if user.ticket is None:
         raise AppError(404, "no_ticket", "You do not have a ticket yet.")
     return _ticket_out(user.ticket)

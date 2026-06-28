@@ -151,3 +151,17 @@ Argon2id's `m` trades password security for drain speed; **the architecture is u
   processes = more cores = faster drain — the right lever, since one process is CPU-bound at its cores.
 - **Not Kubernetes here** — its control plane alone would exceed 1 GB. Orchestration pays off only
   when there are real nodes to orchestrate; this problem is vertical efficiency on fixed hardware.
+
+---
+
+## 7. How to verify
+
+- **Race-safety** is proven by `tests/test_concurrency.py` — it fires simultaneous duplicate
+  registrations, double check-ins, and last-seat payments and asserts exactly one winner:
+  `pytest -k concurrency`.
+- **Memory ceiling** is observable: set a high `ARGON2_MEMORY_COST` and a low `HASH_CONCURRENCY`,
+  fire a concurrent burst, and watch the process RSS plateau at ≈ `baseline + N × m` — it stays flat
+  no matter how many requests pile up.
+- **Load test:** point `hey`/`wrk` at `/auth/register` (vary the email per request). Throughput caps
+  at ≈ `cores ÷ hash_time` and latency grows under load, while memory stays bounded and the server
+  never crashes — exactly the behaviour described above.
