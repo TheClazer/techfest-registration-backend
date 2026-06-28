@@ -115,6 +115,8 @@ docker build -t techfest .
 docker run -p 8000:8000 --env-file .env techfest
 ```
 
+**Make shortcuts** (optional): `make install` · `make run` · `make run-prod` · `make test` · `make volunteer` · `make docker`.
+
 ---
 
 ## Create a volunteer account (for testing)
@@ -137,9 +139,10 @@ command on an existing user promotes them to volunteer.)
 pytest
 ```
 
-34 tests cover registration, login, tickets/QR, payments + idempotency, check-in, RBAC, and
-capacity. (Argon2 cost is lowered in tests for speed; rate limiting is disabled in tests because
-its store is process-global — the 429 path is exercised manually.)
+42 tests cover registration, login, tickets/QR, payments + idempotency, atomic check-in, RBAC,
+capacity, and **real-concurrency races** (duplicate registration, double check-in, last-seat) in
+`tests/test_concurrency.py`. (Argon2 cost is lowered in tests for speed; rate limiting is disabled in
+tests since its store is process-global — the 429 path is verified separately.)
 
 ---
 
@@ -173,6 +176,67 @@ sig = hmac.new(b"dev-webhook-secret-change-me", b"order_xxx:paid", hashlib.sha25
 ```
 
 The included Postman collection computes this automatically in a pre-request script.
+
+---
+
+## End-to-end test (copy-paste)
+
+Three ways to test, pick one:
+
+1. **Swagger UI** — open `http://localhost:8000/docs`, click **Authorize**, and "Try it out" on each endpoint.
+2. **Postman** — import `postman/techfest.postman_collection.json` (tokens, ids, and the webhook signature are handled automatically).
+3. **curl** — the full flow below (bash; works in Git Bash on Windows). It uses the project's own Python to parse JSON and sign the webhook, so no extra tools are needed.
+
+```bash
+BASE=http://localhost:8000
+
+# 1) Register a student  ->  capture the JWT
+TOKEN=$(curl -s -X POST $BASE/auth/register -H 'Content-Type: application/json' \
+  -d '{"name":"Asha","email":"asha@rvce.edu","password":"password123"}' \
+  | python -c "import sys,json;print(json.load(sys.stdin)['access_token'])")
+
+# 2) Create a payment order  ->  capture the order id
+ORDER=$(curl -s -X POST $BASE/payments/order -H "Authorization: Bearer $TOKEN" \
+  | python -c "import sys,json;print(json.load(sys.stdin)['order_id'])")
+
+# 3) Sign + send the gateway webhook to confirm payment
+SIG=$(python -c "import hmac,hashlib;print(hmac.new(b'dev-webhook-secret-change-me', b'$ORDER:paid', hashlib.sha256).hexdigest())")
+curl -s -X POST $BASE/payments/webhook -H 'Content-Type: application/json' \
+  -d "{\"order_id\":\"$ORDER\",\"status\":\"paid\",\"signature\":\"$SIG\"}"
+
+# 4) View the now-confirmed ticket  ->  capture the QR's signed code
+CODE=$(curl -s $BASE/tickets/me -H "Authorization: Bearer $TOKEN" \
+  | python -c "import sys,json;print(json.load(sys.stdin)['ticket_code'])")
+
+# 5) Create a volunteer (CLI) and log in  ->  capture the volunteer JWT
+python -m scripts.create_volunteer --email volunteer@rvce.edu --password password123 --name "Gate Vol"
+VTOKEN=$(curl -s -X POST $BASE/auth/login -H 'Content-Type: application/json' \
+  -d '{"email":"volunteer@rvce.edu","password":"password123"}' \
+  | python -c "import sys,json;print(json.load(sys.stdin)['access_token'])")
+
+# 6) Check the student in at the gate
+curl -s -X POST $BASE/checkin -H "Authorization: Bearer $VTOKEN" \
+  -H 'Content-Type: application/json' -d "{\"ticket_code\":\"$CODE\"}"
+
+# 7) Volunteer dashboard
+curl -s $BASE/stats -H "Authorization: Bearer $VTOKEN"
+curl -s "$BASE/registrations?page=1&page_size=50" -H "Authorization: Bearer $VTOKEN"
+```
+
+Verify the edge cases respond gracefully (prints just the status code):
+
+```bash
+# 409 duplicate registration | 422 invalid input | 401 bad login
+curl -s -o /dev/null -w "%{http_code}\n" -X POST $BASE/auth/register -H 'Content-Type: application/json' -d '{"name":"A","email":"asha@rvce.edu","password":"password123"}'
+curl -s -o /dev/null -w "%{http_code}\n" -X POST $BASE/auth/register -H 'Content-Type: application/json' -d '{"name":"A","email":"bad","password":"x"}'
+curl -s -o /dev/null -w "%{http_code}\n" -X POST $BASE/auth/login    -H 'Content-Type: application/json' -d '{"email":"asha@rvce.edu","password":"nope"}'
+
+# 403 student hitting a volunteer endpoint | 409 double check-in
+curl -s -o /dev/null -w "%{http_code}\n" $BASE/registrations -H "Authorization: Bearer $TOKEN"
+curl -s -o /dev/null -w "%{http_code}\n" -X POST $BASE/checkin -H "Authorization: Bearer $VTOKEN" -H 'Content-Type: application/json' -d "{\"ticket_code\":\"$CODE\"}"
+```
+
+> Re-running the happy path needs a fresh email (or delete `techfest.db` to reset the database).
 
 ---
 
