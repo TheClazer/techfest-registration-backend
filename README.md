@@ -172,67 +172,225 @@ All errors share one shape:
 { "error": { "code": "machine_code", "message": "Human readable.", "details": null } }
 ```
 
-### Auth
+Summary of every endpoint:
 
-| Method | Path | Auth | Body | Success | Errors |
-| --- | --- | --- | --- | --- | --- |
-| POST | `/auth/register` | — | `{name, email, password}` | `201` user + ticket + `access_token` | `422` invalid · `409` `email_taken` · `429` |
-| POST | `/auth/login` | — | `{email, password}` | `200` `access_token` + user | `401` `invalid_credentials` · `422` · `429` |
+| # | Method | Path | Auth |
+| --- | --- | --- | --- |
+| 1 | POST | `/auth/register` | public |
+| 2 | POST | `/auth/login` | public |
+| 3 | GET | `/tickets/me` | student |
+| 4 | GET | `/tickets/me/qr` | student |
+| 5 | POST | `/payments/order` | student |
+| 6 | POST | `/payments/webhook` | HMAC signature |
+| 7 | POST | `/checkin` | volunteer |
+| 8 | GET | `/registrations` | volunteer |
+| 9 | GET | `/stats` | volunteer |
+| 10 | GET | `/health` | public |
+| 11 | GET | `/docs`, `/openapi.json` | public |
 
-`POST /auth/register` request:
+---
+
+### 1. `POST /auth/register`
+
+Create a student account and its `pending_payment` ticket. Public (rate-limited).
+
+**Request body**
 
 ```json
 { "name": "Asha", "email": "asha@rvce.edu", "password": "password123" }
 ```
 
-Response `201`:
+`name` (1–120 chars), `email` (valid, unique — case-insensitive), `password` (8–128 chars).
+
+**Response `201`**
 
 ```json
 {
-  "user": { "id": 1, "name": "Asha", "email": "asha@rvce.edu", "role": "student", "created_at": "..." },
-  "ticket": { "id": 1, "status": "pending_payment", "created_at": "...", "ticket_code": null, "qr_png_base64": null },
-  "access_token": "eyJ...", "token_type": "bearer"
+  "user": { "id": 1, "name": "Asha", "email": "asha@rvce.edu", "role": "student", "created_at": "2026-06-28T09:00:00Z" },
+  "ticket": { "id": 1, "status": "pending_payment", "created_at": "2026-06-28T09:00:00Z",
+              "confirmed_at": null, "checked_in_at": null, "ticket_code": null, "qr_png_base64": null },
+  "access_token": "eyJhbGciOi...", "token_type": "bearer"
 }
 ```
 
-### Tickets (student)
+**Errors** — `422` invalid input · `409` `email_taken` · `429` `rate_limited`
 
-| Method | Path | Auth | Success | Errors |
-| --- | --- | --- | --- | --- |
-| GET | `/tickets/me` | student | `200` ticket (with `ticket_code` + `qr_png_base64` once confirmed) | `401` · `404` `no_ticket` |
-| GET | `/tickets/me/qr` | student | `200` `image/png` | `401` · `404` · `409` `ticket_not_confirmed` |
+---
 
-### Payments
+### 2. `POST /auth/login`
 
-| Method | Path | Auth | Body | Success | Errors |
-| --- | --- | --- | --- | --- | --- |
-| POST | `/payments/order` | student | — | `200` `{order_id, amount, currency, status}` | `401` · `404` `no_ticket` · `409` `already_paid` |
-| POST | `/payments/webhook` | signature | `{order_id, status, signature}` | `200` `{order_id, payment_status, ticket_status}` | `400` `invalid_signature` · `404` `order_not_found` · `409` `sold_out` |
+Authenticate and receive a JWT. Public (rate-limited).
 
-`amount` is in paise (e.g. `50000` = ₹500.00). `/payments/order` is idempotent (returns the existing
-open order). `/payments/webhook` is idempotent (replays do not double-confirm).
+**Request body**
 
-### Check-in (volunteer)
+```json
+{ "email": "asha@rvce.edu", "password": "password123" }
+```
 
-| Method | Path | Auth | Body | Success | Errors |
-| --- | --- | --- | --- | --- | --- |
-| POST | `/checkin` | volunteer | `{ticket_code}` | `200` `{ticket_id, status, student, checked_in_at}` | `400` `invalid_ticket` · `401` · `403` · `404` · `409` `already_checked_in` / `not_confirmed` |
+**Response `200`**
 
-`ticket_code` is the signed token from the student's QR (the `ticket_code` field of `/tickets/me`).
+```json
+{
+  "access_token": "eyJhbGciOi...", "token_type": "bearer",
+  "user": { "id": 1, "name": "Asha", "email": "asha@rvce.edu", "role": "student", "created_at": "2026-06-28T09:00:00Z" }
+}
+```
 
-### Volunteer dashboard
+**Errors** — `401` `invalid_credentials` (generic, no user enumeration) · `422` · `429`
 
-| Method | Path | Auth | Query | Success | Errors |
-| --- | --- | --- | --- | --- | --- |
-| GET | `/registrations` | volunteer | `status`, `page`, `page_size` | `200` `{items, total, page, page_size}` | `401` · `403` |
-| GET | `/stats` | volunteer | — | `200` `{event, capacity, total_registered, paid, checked_in, remaining}` | `401` · `403` |
+---
 
-### Misc
+### 3. `GET /tickets/me`
 
-| Method | Path | Auth | Success |
-| --- | --- | --- | --- |
-| GET | `/health` | — | `200 {status:"ok"}` |
-| GET | `/docs`, `/openapi.json` | — | Swagger UI / OpenAPI schema |
+The authenticated student's own ticket. `ticket_code` and `qr_png_base64` are populated only once the
+ticket is `confirmed`. **Request:** no body; `Authorization: Bearer <student token>`.
+
+**Response `200`** (after payment)
+
+```json
+{
+  "id": 1, "status": "confirmed",
+  "created_at": "2026-06-28T09:00:00Z", "confirmed_at": "2026-06-28T09:05:00Z", "checked_in_at": null,
+  "ticket_code": "InRpZCI6...signed-token...",
+  "qr_png_base64": "iVBORw0KGgoAAAANSUhEUgAA..."
+}
+```
+
+**Errors** — `401` unauthorized · `404` `no_ticket`
+
+---
+
+### 4. `GET /tickets/me/qr`
+
+The ticket QR as a downloadable image. **Request:** no body; student bearer token.
+
+**Response `200`** — binary body, `Content-Type: image/png`.
+
+**Errors** — `401` · `404` `no_ticket` · `409` `ticket_not_confirmed`
+
+---
+
+### 5. `POST /payments/order`
+
+Create (or fetch the existing open) payment order for the caller's ticket. **Request:** no body;
+student bearer token. Idempotent — repeat calls return the same open order.
+
+**Response `200`**
+
+```json
+{ "order_id": "order_3f2a...", "amount": 50000, "currency": "INR", "status": "created" }
+```
+
+`amount` is in paise (`50000` = ₹500.00).
+
+**Errors** — `401` · `404` `no_ticket` · `409` `already_paid`
+
+---
+
+### 6. `POST /payments/webhook`
+
+Mock payment-gateway callback. Authenticated by an HMAC signature (not a JWT), and idempotent — a
+replayed webhook never double-confirms. See **Payment webhook signing** above for the signature.
+
+**Request body**
+
+```json
+{ "order_id": "order_3f2a...", "status": "paid", "signature": "9c1f...hex-hmac-sha256" }
+```
+
+`status` is `"paid"` or `"failed"`.
+
+**Response `200`**
+
+```json
+{ "order_id": "order_3f2a...", "payment_status": "paid", "ticket_status": "confirmed" }
+```
+
+**Errors** — `400` `invalid_signature` · `404` `order_not_found` · `409` `sold_out`
+
+---
+
+### 7. `POST /checkin`
+
+Volunteer scans a ticket QR at the gate. Atomic — a ticket can be checked in exactly once.
+**Auth:** volunteer bearer token.
+
+**Request body**
+
+```json
+{ "ticket_code": "InRpZCI6...signed-token..." }
+```
+
+`ticket_code` is the value from the student's `/tickets/me` (`ticket_code`), i.e. the QR contents.
+
+**Response `200`**
+
+```json
+{
+  "ticket_id": 1, "status": "checked_in",
+  "student": { "id": 1, "name": "Asha", "email": "asha@rvce.edu" },
+  "checked_in_at": "2026-06-28T18:30:00Z"
+}
+```
+
+**Errors** — `400` `invalid_ticket` (forged/tampered) · `401` · `403` (not a volunteer) ·
+`404` `ticket_not_found` · `409` `already_checked_in` / `not_confirmed`
+
+---
+
+### 8. `GET /registrations`
+
+List all registrations. **Auth:** volunteer bearer token.
+
+**Query parameters** — `status` (optional: `pending_payment` | `confirmed` | `checked_in`),
+`page` (default `1`), `page_size` (default `50`, max `200`).
+
+**Response `200`**
+
+```json
+{
+  "items": [
+    { "user_id": 1, "name": "Asha", "email": "asha@rvce.edu", "ticket_id": 1,
+      "ticket_status": "checked_in", "registered_at": "2026-06-28T09:00:00Z",
+      "checked_in_at": "2026-06-28T18:30:00Z" }
+  ],
+  "total": 1, "page": 1, "page_size": 50
+}
+```
+
+**Errors** — `401` · `403`
+
+---
+
+### 9. `GET /stats`
+
+Event totals. **Auth:** volunteer bearer token. **Request:** no body.
+
+**Response `200`**
+
+```json
+{ "event": "TechFest 2026", "capacity": 500, "total_registered": 1, "paid": 1, "checked_in": 1, "remaining": 499 }
+```
+
+**Errors** — `401` · `403`
+
+---
+
+### 10. `GET /health`
+
+Liveness check. Public, no body.
+
+**Response `200`**
+
+```json
+{ "status": "ok", "service": "Tech Fest Registration API", "environment": "development" }
+```
+
+---
+
+### 11. `GET /docs` and `GET /openapi.json`
+
+Auto-generated **Swagger UI** and the **OpenAPI schema** documenting every endpoint and model. Public.
 
 ---
 
