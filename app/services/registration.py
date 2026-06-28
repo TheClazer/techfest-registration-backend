@@ -17,10 +17,6 @@ def register_student(db: Session, *, name: str, email: str, password: str) -> tu
     expensive hash), and the database UNIQUE constraint is the hard guarantee against a
     concurrent duplicate slipping through.
     """
-    # MEETS REQUIREMENT: Mandatory Requirement 2 (Registration).
-    # WEAK POINT: Concurrent identical registration requests (same email) can both pass
-    # the email check concurrently, proceed to hash their passwords concurrently,
-    # and only fail later on DB commit due to the UNIQUE constraint.
     email_norm = email.strip().lower()
 
     if db.scalar(select(User).where(User.email == email_norm)) is not None:
