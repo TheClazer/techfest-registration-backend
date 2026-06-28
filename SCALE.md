@@ -118,16 +118,10 @@ flowchart LR
 
     subgraph API["FastAPI on Uvicorn — single async process"]
         direction TB
-        A["Accept handler (async)
-        1. validate
-        2. dedupe (before enqueue)
-        3. create job = pending
-        4. enqueue"]
+        A["Accept handler (async)<br/>1. validate<br/>2. dedupe (before enqueue)<br/>3. create job = pending<br/>4. enqueue"]
         Q["In-memory queue"]
-        WP["Worker pool — N = 2
-        (the memory ceiling)"]
-        H["Argon2id hash
-        ~46 MiB each"]
+        WP["Worker pool — N = 2<br/>(the memory ceiling)"]
+        H["Argon2id hash<br/>~46 MiB each"]
         DB[("SQLite (WAL)")]
         A --> Q --> WP --> H --> DB
     end
