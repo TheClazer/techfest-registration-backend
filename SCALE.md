@@ -7,7 +7,8 @@
 
 - **Hardware:** 1 GB RAM, **~2 vCPU** (typical small cloud instance; often burstable/shared).
 - **Password hash:** **Argon2id** (OWASP-recommended), `m = 46 MiB, t = 1, p = 1` → ~46 MiB **and**
-  ~one core per call.
+  ~one core per call, **cost ≈ 80 ms** (a working estimate — confirm by load-test on the target box;
+  it drives the drain-time math in §4).
 - **Server:** async ASGI — **FastAPI + Uvicorn**, single process.
 - **Queue:** in-memory (no Redis on a 1 GB box — see §6).
 - **Baseline footprint:** OS + Python + Uvicorn + SQLite ≈ 250–350 MB, leaving **~450 MB for hashing**.
