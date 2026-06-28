@@ -49,6 +49,9 @@ class Settings(BaseSettings):
     # Database
     database_url: str = "sqlite:///./techfest.db"
 
+    # Async registration queue (the additive /auth/register-async path)
+    queue_max: int = 1000
+
 
 @lru_cache
 def get_settings() -> Settings:

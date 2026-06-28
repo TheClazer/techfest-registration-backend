@@ -23,6 +23,9 @@ DESCRIPTION = (
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
     init_db()
+    from .jobs import start_workers
+
+    start_workers()
     yield
 
 

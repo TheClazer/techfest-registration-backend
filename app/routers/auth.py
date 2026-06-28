@@ -11,9 +11,12 @@ from sqlalchemy.orm import Session
 
 from ..database import get_db
 from ..errors import AppError
+from ..jobs import get_job, submit
 from ..models import User
 from ..ratelimit import LOGIN_LIMIT, REGISTER_LIMIT, limiter
 from ..schemas import (
+    JobAccepted,
+    JobStatus,
     LoginRequest,
     RegisterRequest,
     RegisterResponse,
@@ -62,3 +65,30 @@ def login(request: Request, payload: LoginRequest, db: Session = Depends(get_db)
 
     token = create_access_token(user_id=user.id, role=user.role.value)
     return TokenResponse(access_token=token, user=UserOut.model_validate(user))
+
+
+@router.post(
+    "/register-async",
+    response_model=JobAccepted,
+    status_code=status.HTTP_202_ACCEPTED,
+    summary="Queue a registration and return immediately (async path — see SCALE.md)",
+)
+@limiter.limit(REGISTER_LIMIT)
+def register_async(request: Request, payload: RegisterRequest, db: Session = Depends(get_db)) -> JobAccepted:
+    # Reject known duplicates up front (the worker also guards via the UNIQUE constraint).
+    if db.scalar(select(User).where(User.email == payload.email.strip().lower())) is not None:
+        raise AppError(409, "email_taken", "An account with this email already exists.")
+    job_id = submit(name=payload.name, email=payload.email, password=payload.password)
+    return JobAccepted(job_id=job_id, status="pending", status_url=f"/auth/register/status/{job_id}")
+
+
+@router.get(
+    "/register/status/{job_id}",
+    response_model=JobStatus,
+    summary="Poll the status of an async registration job",
+)
+def register_status(job_id: str) -> JobStatus:
+    job = get_job(job_id)
+    if job is None:
+        raise AppError(404, "job_not_found", "No registration job with that id.")
+    return JobStatus(job_id=job_id, status=job["status"], result=job["result"], error=job["error"])

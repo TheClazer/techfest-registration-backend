@@ -141,10 +141,11 @@ Argon2id's `m` trades password security for drain speed; **the architecture is u
 
 ## 6. If traffic grew well beyond this
 
-- **Async queue + `202` + poll.** Accept instantly, return a `job_id`, drain with the *same* bounded
-  workers, let the client poll for completion. Same memory ceiling, but it frees the connection and
-  hides the wait — removing the synchronous-tail weakness above. (This is the natural next step on
-  top of the semaphore already in place.)
+- **Async queue + `202` + poll — implemented (additive).** `POST /auth/register-async` accepts
+  instantly and returns a `job_id`; a bounded worker pool (`app/jobs.py`, size = `HASH_CONCURRENCY`)
+  drains an in-memory queue using the *same* hash semaphore, and clients poll
+  `GET /auth/register/status/{job_id}`. The synchronous `/auth/register` stays the default. Same
+  memory ceiling, but this path frees the connection and removes the synchronous-tail weakness above.
 - **Durable queue** (Redis + RQ/Celery) so pending jobs survive a restart — ~100 MB RAM, not worth
   it at 1 GB today.
 - **Scale out:** more app processes behind a load balancer (the accept path is stateless). More

@@ -10,6 +10,7 @@
     { "key": "volunteer_token", "value": "" },
     { "key": "order_id", "value": "" },
     { "key": "ticket_code", "value": "" },
+    { "key": "job_id", "value": "" },
     { "key": "webhook_signature", "value": "" },
     { "key": "webhook_secret", "value": "dev-webhook-secret-change-me" },
     { "key": "student_email", "value": "asha@rvce.edu" },
@@ -50,6 +51,41 @@
               "raw": "{\n  \"name\": \"Asha\",\n  \"email\": \"{{student_email}}\",\n  \"password\": \"{{student_password}}\"\n}"
             },
             "url": { "raw": "{{base_url}}/auth/register", "host": ["{{base_url}}"], "path": ["auth", "register"] }
+          }
+        },
+        {
+          "name": "Register Student (async)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const j = pm.response.json();",
+                  "if (j.job_id) { pm.collectionVariables.set('job_id', j.job_id); }",
+                  "pm.test('accepted (202)', () => pm.response.to.have.status(202));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Async\",\n  \"email\": \"async@rvce.edu\",\n  \"password\": \"password123\"\n}"
+            },
+            "url": { "raw": "{{base_url}}/auth/register-async", "host": ["{{base_url}}"], "path": ["auth", "register-async"] }
+          }
+        },
+        {
+          "name": "Get Registration Status",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/auth/register/status/{{job_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["auth", "register", "status", "{{job_id}}"]
+            }
           }
         },
         {

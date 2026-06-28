@@ -64,6 +64,19 @@ class RegisterResponse(BaseModel):
     token_type: str = "bearer"
 
 
+class JobAccepted(BaseModel):
+    job_id: str
+    status: str = "pending"
+    status_url: str
+
+
+class JobStatus(BaseModel):
+    job_id: str
+    status: str  # pending | completed | failed
+    result: RegisterResponse | None = None
+    error: dict | None = None
+
+
 # --------------------------------------------------------------------------- #
 # Payments
 # --------------------------------------------------------------------------- #

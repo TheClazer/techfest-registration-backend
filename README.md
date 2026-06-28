@@ -236,6 +236,15 @@ curl -s -o /dev/null -w "%{http_code}\n" $BASE/registrations -H "Authorization: 
 curl -s -o /dev/null -w "%{http_code}\n" -X POST $BASE/checkin -H "Authorization: Bearer $VTOKEN" -H 'Content-Type: application/json' -d "{\"ticket_code\":\"$CODE\"}"
 ```
 
+**Async registration variant** (the bonus path — accept instantly, then poll):
+
+```bash
+JOB=$(curl -s -X POST $BASE/auth/register-async -H 'Content-Type: application/json' \
+  -d '{"name":"Bo","email":"bo@rvce.edu","password":"password123"}' \
+  | python -c "import sys,json;print(json.load(sys.stdin)['job_id'])")
+curl -s $BASE/auth/register/status/$JOB    # poll until "status":"completed"
+```
+
 > Re-running the happy path needs a fresh email (or delete `techfest.db` to reset the database).
 
 ---
@@ -264,6 +273,8 @@ Summary of every endpoint:
 | 9 | GET | `/stats` | volunteer |
 | 10 | GET | `/health` | public |
 | 11 | GET | `/docs`, `/openapi.json` | public |
+
+_Plus an additive async path (bonus — see [SCALE.md](SCALE.md)): **`POST /auth/register-async`** returns `202 {job_id}`, then poll **`GET /auth/register/status/{job_id}`**. Documented at the end of this section._
 
 ---
 
@@ -468,6 +479,34 @@ Liveness check. Public, no body.
 ### 11. `GET /docs` and `GET /openapi.json`
 
 Auto-generated **Swagger UI** and the **OpenAPI schema** documenting every endpoint and model. Public.
+
+---
+
+### Bonus: async registration path
+
+For the registration spike (see [SCALE.md](SCALE.md)), an **additive**, non-blocking path is also
+available. The synchronous `/auth/register` above is unchanged; this one accepts instantly and a
+bounded background worker pool does the (memory-hard) hashing off the request path.
+
+**`POST /auth/register-async`** — public (rate-limited). Same body as `/auth/register`. Returns `202`:
+
+```json
+{ "job_id": "676ea358e8004bd0ba239ab0d931f767", "status": "pending",
+  "status_url": "/auth/register/status/676ea358e8004bd0ba239ab0d931f767" }
+```
+
+Errors — `409` `email_taken` · `422` · `429` · `503` `overloaded` (queue full).
+
+**`GET /auth/register/status/{job_id}`** — poll until done. Returns `200`; while processing
+`status` is `"pending"`, and on completion `result` holds the same payload as the synchronous register:
+
+```json
+{ "job_id": "...", "status": "completed",
+  "result": { "user": { "...": "..." }, "ticket": { "...": "..." }, "access_token": "eyJ...", "token_type": "bearer" },
+  "error": null }
+```
+
+Errors — `404` `job_not_found`.
 
 ---
 
